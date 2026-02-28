@@ -1,10 +1,8 @@
 // src/lib/supabase/server.ts
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CookieOptions } from "@supabase/ssr";
 
-export async function createClient(): Promise<SupabaseClient> {
+export async function createClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -16,17 +14,24 @@ export async function createClient(): Promise<SupabaseClient> {
 
     const cookieStore = await cookies();
 
-    return createServerClient(url, key, {
-        cookies: {
-            getAll: () =>
-                cookieStore
-                    .getAll()
-                    .map((cookie) => ({ name: cookie.name, value: cookie.value })),
-            setAll: (cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }>) => {
-                cookiesToSet.forEach(({ name, value, options }) => {
-                    cookieStore.set(name, value, options);
-                });
-            },
+    // Adapter to match Supabase expected type
+    const cookieAdapter = {
+        getAll: () => {
+            return cookieStore.getAll().map((c) => ({
+                name: c.name,
+                value: c.value,
+            }));
         },
-    });
+        setAll: (cookiesToSet: any[]) => {
+            try {
+                cookiesToSet.forEach((c) => {
+                    cookieStore.set(c.name, c.value, c.options);
+                });
+            } catch (error) {
+                // Silently fail in cases where cookies cannot be set (e.g., middleware)
+            }
+        },
+    };
+
+    return createServerClient(url, key, { cookies: cookieAdapter });
 }
