@@ -1,13 +1,7 @@
-import {createClient} from "@/lib/supabase/server";
-import {redirect} from "next/navigation";
+import {requireAuth} from "@/lib/auth";
 
 export default async function OrgPage() {
-    const supabase = await createClient();
-    const {data: {user}, error} = await supabase.auth.getUser();
-
-    if (error || !user) {
-        redirect("/login");
-    }
+    const user = await requireAuth();
 
     return (
         <div>

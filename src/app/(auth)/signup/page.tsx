@@ -55,6 +55,12 @@ export default function SignupPage() {
                     Signup
                 </button>
             </form>
+            <p className="mt-4 text-center">
+                Already have an account?{" "}
+                <a href="/login" className="text-blue-600 underline">
+                    Login here
+                </a>
+            </p>
         </div>
     );
 }

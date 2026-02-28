@@ -1,5 +1,5 @@
 // src/lib/supabase/server.ts
-import { createServerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export async function createClient() {
@@ -14,24 +14,23 @@ export async function createClient() {
 
     const cookieStore = await cookies();
 
-    // Adapter to match Supabase expected type
-    const cookieAdapter = {
-        getAll: () => {
-            return cookieStore.getAll().map((c) => ({
-                name: c.name,
-                value: c.value,
-            }));
+    return createServerClient(url, key, {
+        cookies: {
+            getAll() {
+                return cookieStore.getAll().map((c) => ({
+                    name: c.name,
+                    value: c.value,
+                }));
+            },
+            setAll(cookiesToSet) {
+                try {
+                    cookiesToSet.forEach(({ name, value, options }) => {
+                        cookieStore.set(name, value, options);
+                    });
+                } catch (error) {
+                    // Silently fail in cases where cookies cannot be set (e.g., middleware)
+                }
+            },
         },
-        setAll: (cookiesToSet: any[]) => {
-            try {
-                cookiesToSet.forEach((c) => {
-                    cookieStore.set(c.name, c.value, c.options);
-                });
-            } catch (error) {
-                // Silently fail in cases where cookies cannot be set (e.g., middleware)
-            }
-        },
-    };
-
-    return createServerClient(url, key, { cookies: cookieAdapter });
+    });
 }
