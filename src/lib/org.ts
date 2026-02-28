@@ -3,7 +3,7 @@ import {Org} from "@/types/domain";
 import type { PostgrestError } from '@supabase/postgrest-js';
 
 export async function getUserOrgs(userId: string): Promise<Org[]> {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Call .from() without incorrect generics and assert the result type to Org[]
     const {data, error} = (await supabase
