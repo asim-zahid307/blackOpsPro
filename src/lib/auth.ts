@@ -1,13 +1,25 @@
-import {createClient} from "./supabase/server";
-import {redirect} from "next/navigation";
+import { getUserFromToken } from './jwt';
+import { redirect } from 'next/navigation';
 
-export async function requireAuth() {
-    const supabase = await createClient();
-    const {data: {user}, error} = await supabase.auth.getUser();
+export interface User {
+    userId: string;
+    email: string;
+}
 
-    if (error || !user) {
-        redirect("/login");
+export async function requireAuth(): Promise<User> {
+    const user = await getUserFromToken();
+
+    if (!user) {
+        redirect('/login');
     }
 
-    return user;
+    return {
+        userId: user.userId,
+        email: user.email,
+    };
 }
+
+export async function getUser(): Promise<User | null> {
+    return await getUserFromToken();
+}
+
