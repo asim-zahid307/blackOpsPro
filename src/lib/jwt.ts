@@ -6,6 +6,7 @@ export interface JWTPayload {
     email: string;
     iat?: number;
     exp?: number;
+    orgId?: string; // optional, because not every JWT needs it
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
