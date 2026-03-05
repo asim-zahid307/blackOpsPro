@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { query, queryOne } from '@/lib/db';
+import { queryOne } from '@/lib/db';
 import { createToken } from '@/lib/jwt';
+import { DBUser } from '@/types/domain';
 
 export async function POST(request: NextRequest) {
     try {
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const user = await queryOne(
+        const user = await queryOne<DBUser>(
             'SELECT id, email, password_hash FROM users WHERE email = $1',
             [email]
         );
@@ -62,4 +63,3 @@ export async function POST(request: NextRequest) {
         );
     }
 }
-
