@@ -2,65 +2,113 @@
 
 import {useState} from "react";
 import {useRouter} from "next/navigation";
-import {createClient} from "@/lib/supabase/browser";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
-
-    const supabase = createClient();
 
     async function handleLogin(e: React.FormEvent) {
         e.preventDefault();
         setErrorMsg("");
+        setIsLoading(true);
 
-        const {error} = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
+        try {
+            const response = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({email, password}),
+            });
 
-        if (error) {
-            setErrorMsg(error.message);
-            return;
+            const data = await response.json();
+
+            if (!response.ok) {
+                setErrorMsg(data.error || "Login failed");
+                return;
+            }
+
+            router.push("/org");
+        } catch (error) {
+            setErrorMsg("An error occurred. Please try again.");
+            console.error(error);
+        } finally {
+            setIsLoading(false);
         }
-
-        // Redirect to protected page after login
-        router.push("/org");
     }
 
     return (
-        <div className="max-w-md mx-auto mt-20 p-6 border rounded">
-            <h1 className="text-2xl mb-4">Login</h1>
-            <form onSubmit={handleLogin} className="space-y-4">
-                <input
-                    type="email"
-                    placeholder="Email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="w-full p-2 border rounded"
-                />
-                <input
-                    type="password"
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full p-2 border rounded"
-                />
-                {errorMsg && <p className="text-red-500">{errorMsg}</p>}
-                <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded">
-                    Login
-                </button>
-            </form>
-            <p className="mt-4 text-center">
-                Don't have an account?{" "}
-                <a href="/signup" className="text-blue-600 underline">
-                    Sign up here
-                </a>
-            </p>
+        <div
+            className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6">
+
+            <div
+                className="w-full max-w-md rounded-2xl border border-white/30 bg-white/40 backdrop-blur-xl shadow-xl p-8">
+
+                <div className="text-center mb-6">
+                    <div
+                        className="mx-auto mb-4 h-12 w-12 rounded-xl bg-black text-white flex items-center justify-center font-bold">
+                        BO
+                    </div>
+
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        BlackOps Pro Login
+                    </h1>
+
+                    <p className="text-sm text-gray-600 mt-1">
+                        Access your workspace
+                    </p>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-4">
+
+                    <input
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="w-full rounded-lg border border-gray-200 bg-white/70 backdrop-blur px-4 py-2 focus:outline-none focus:ring-2 focus:ring-black"
+                    />
+
+                    <input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="w-full rounded-lg border border-gray-200 bg-white/70 backdrop-blur px-4 py-2 focus:outline-none focus:ring-2 focus:ring-black"
+                    />
+
+                    {errorMsg && (
+                        <p className="text-sm text-red-500">
+                            {errorMsg}
+                        </p>
+                    )}
+
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full rounded-lg bg-black text-white py-2 font-medium hover:bg-gray-800 transition disabled:opacity-60"
+                    >
+                        {isLoading ? "Logging in..." : "Login"}
+                    </button>
+
+                </form>
+
+                <p className="mt-6 text-center text-sm text-gray-600">
+                    Don't have an account?{" "}
+                    <a href="/signup" className="text-black font-medium underline">
+                        Sign up here
+                    </a>
+                </p>
+
+            </div>
+
         </div>
     );
 }

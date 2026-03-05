@@ -1,20 +1,16 @@
-import {createClient} from "./supabase/server";
-import {Org} from "@/types/domain";
-import type { PostgrestError } from '@supabase/postgrest-js';
+import { query } from './db';
+import { Org } from '@/types/domain';
 
 export async function getUserOrgs(userId: string): Promise<Org[]> {
-    const supabase = await createClient();
-
-    // Call .from() without incorrect generics and assert the result type to Org[]
-    const {data, error} = (await supabase
-        .from("organizations")
-        .select("*")
-        .eq("user_id", userId)) as { data: Org[] | null; error: PostgrestError | null };
-
-    if (error) {
-        console.error("Error fetching orgs:", error);
+    try {
+        const result = await query(
+            'SELECT id, name, created_at FROM organizations WHERE user_id = $1 ORDER BY created_at DESC',
+            [userId]
+        );
+        return result.rows as Org[];
+    } catch (error) {
+        console.error('Error fetching orgs:', error);
         return [];
     }
-
-    return data ?? [];
 }
+

@@ -1,0 +1,102 @@
+==============================================================
+POSTGRESQL 18 - EXACT COMMANDS TO RUN
+==============================================================
+
+DATABASE: blackopspro
+HOST: localhost:5432
+USER: postgres
+PASSWORD: postgres
+
+==============================================================
+STEP 1: CREATE DATABASE TABLES
+==============================================================
+
+Run this ONCE to set up your database:
+
+psql -U postgres -d blackopspro -f setup.sql
+
+Result should show:
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+SELECT 2 rows
+
+==============================================================
+STEP 2: VERIFY TABLES CREATED
+==============================================================
+
+psql -U postgres -d blackopspro
+
+In psql prompt, type:
+\dt
+
+You should see:
+             List of relations
+ Schema |    Name     | Type  |
+--------+-------------+-------+
+ public | organizations | table |
+ public | users       | table |
+
+Exit with: \q
+
+==============================================================
+STEP 3: START DEVELOPMENT SERVER
+==============================================================
+
+npm run dev
+
+Output should show:
+▲ Next.js 16.1.6
+  ready - started server on 0.0.0.0:3000
+
+==============================================================
+STEP 4: TEST IN BROWSER
+==============================================================
+
+1. Open: http://localhost:3000/signup
+2. Create account:
+   Email: test@example.com
+   Password: password123
+3. Click "Signup"
+4. You'll be redirected to /login
+5. Login with same credentials
+6. You should see dashboard
+
+==============================================================
+TROUBLESHOOTING
+==============================================================
+
+If "psql command not found":
+- Make sure PostgreSQL 18 is installed
+- Add to PATH or use full path: C:\Program Files\PostgreSQL\18\bin\psql
+
+If "database does not exist":
+- Create it first: createdb -U postgres blackopspro
+- Then: psql -U postgres -d blackopspro -f setup.sql
+
+If "cannot connect to server":
+- Make sure PostgreSQL service is running
+- On Windows: Services > postgresql-x64-18 > Start
+- On Linux: sudo service postgresql start
+- On Mac: brew services start postgresql
+
+If "tables already exist":
+- That's fine! setup.sql uses "CREATE TABLE IF NOT EXISTS"
+- You can run it multiple times safely
+
+If "permission denied":
+- Check PostgreSQL user (postgres) has permissions
+- Or add current Windows user to PostgreSQL
+
+==============================================================
+THAT'S ALL YOU NEED!
+==============================================================
+
+Once tables are created:
+1. npm run dev
+2. Test signup/login at http://localhost:3000
+3. Start building!
+
+Your project is ready. No more setup needed.
+
