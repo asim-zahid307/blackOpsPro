@@ -1,4 +1,6 @@
-import { getUserFromToken } from './jwt';
+import { getUserFromToken, createToken, setTokenCookie, clearTokenCookie } from './jwt';
+import { query, queryOne } from './db';
+import bcrypt from 'bcryptjs';
 import { redirect } from 'next/navigation';
 
 export interface User {
@@ -23,3 +25,66 @@ export async function getUser(): Promise<User | null> {
     return await getUserFromToken();
 }
 
+export async function loginUser(email: string, password: string): Promise<string> {
+    try {
+        const user = await queryOne(
+            'SELECT id, email, password_hash FROM users WHERE email = $1',
+            [email]
+        );
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        if (!isValidPassword) {
+            throw new Error('Invalid password');
+        }
+
+        const token = await createToken({
+            userId: user.id,
+            email: user.email,
+        });
+
+        await setTokenCookie(token);
+
+        return token;
+    } catch (error) {
+        console.error('Login error:', error);
+        throw error;
+    }
+}
+
+export async function signupUser(email: string, password: string): Promise<string> {
+    try {
+        const existingUser = await queryOne('SELECT id FROM users WHERE email = $1', [email]);
+        if (existingUser) {
+            throw new Error('User already exists');
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const result = await query(
+            'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email',
+            [email, hashedPassword]
+        );
+
+        const newUser = result.rows[0];
+
+        const token = await createToken({
+            userId: newUser.id,
+            email: newUser.email,
+        });
+
+        await setTokenCookie(token);
+
+        return token;
+    } catch (error) {
+        console.error('Signup error:', error);
+        throw error;
+    }
+}
+
+export async function logoutUser() {
+    await clearTokenCookie();
+}

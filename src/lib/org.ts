@@ -13,4 +13,3 @@ export async function getUserOrgs(userId: string): Promise<Org[]> {
         return [];
     }
 }
-

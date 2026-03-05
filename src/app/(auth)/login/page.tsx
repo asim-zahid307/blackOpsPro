@@ -16,25 +16,21 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            const response = await fetch("/api/auth/login", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({email, password}),
             });
 
             const data = await response.json();
 
-            if (!response.ok) {
-                setErrorMsg(data.error || "Login failed");
-                return;
+            if (response.ok) {
+                router.push("/org");
+            } else {
+                setErrorMsg(data.error);
             }
-
-            router.push("/org");
-        } catch (error) {
-            setErrorMsg("An error occurred. Please try again.");
-            console.error(error);
+        } catch (error: unknown) {
+            setErrorMsg((error as Error).message);
         } finally {
             setIsLoading(false);
         }
