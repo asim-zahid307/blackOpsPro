@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Check if user already exists
         const existingUser = await queryOne(
             'SELECT id FROM users WHERE email = $1',
             [email]
@@ -33,8 +34,10 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Create new user
         const result = await query(
             'INSERT INTO users (email, password_hash, created_at) VALUES ($1, $2, NOW()) RETURNING id, email',
             [email, hashedPassword]
@@ -42,11 +45,13 @@ export async function POST(request: NextRequest) {
 
         const newUser = result.rows[0];
 
+        // Create JWT token
         const token = await createToken({
             userId: newUser.id,
             email: newUser.email,
         });
 
+        // Set token in httpOnly cookie
         const response = NextResponse.json(
             { message: 'Signup successful' },
             { status: 201 }
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest) {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
-            maxAge: 7 * 24 * 60 * 60,
+            maxAge: 7 * 24 * 60 * 60, // 7 days
             path: '/',
         });
 

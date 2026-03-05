@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '@/lib/db';
-import { createToken } from '@/lib/jwt';
+import { createToken, setTokenCookie } from '@/lib/jwt';
 
 export async function POST(request: NextRequest) {
     try {
@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Find user by email
         const user = await queryOne(
             'SELECT id, email, password_hash FROM users WHERE email = $1',
             [email]
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Verify password
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
         if (!isValidPassword) {
@@ -35,11 +37,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Create JWT token
         const token = await createToken({
             userId: user.id,
             email: user.email,
         });
 
+        // Set token in httpOnly cookie
         const response = NextResponse.json(
             { message: 'Login successful' },
             { status: 200 }
@@ -49,7 +53,7 @@ export async function POST(request: NextRequest) {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
-            maxAge: 7 * 24 * 60 * 60,
+            maxAge: 7 * 24 * 60 * 60, // 7 days
             path: '/',
         });
 

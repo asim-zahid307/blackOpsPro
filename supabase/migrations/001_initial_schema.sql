@@ -1,6 +1,5 @@
--- PostgreSQL 18 Schema for black-ops-pro
 -- Create users table
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -9,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Create organizations table
-CREATE TABLE IF NOT EXISTS organizations (
+CREATE TABLE organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -18,6 +17,6 @@ CREATE TABLE IF NOT EXISTS organizations (
 );
 
 -- Create indexes for better query performance
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_organizations_user_id ON organizations(user_id);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_organizations_user_id ON organizations(user_id);
 

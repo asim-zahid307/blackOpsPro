@@ -33,7 +33,7 @@ export async function setTokenCookie(token: string) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
+        maxAge: 7 * 24 * 60 * 60, // 7 days
         path: '/',
     });
 }
@@ -54,4 +54,9 @@ export async function getUserFromToken(): Promise<JWTPayload | null> {
     if (!token) return null;
     return verifyToken(token);
 }
+
+
+
+
+
 
