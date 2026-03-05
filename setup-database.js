@@ -13,12 +13,18 @@ async function setupComplete() {
 }
 
 async function initializeDatabase() {
+    // Get credentials from environment or use defaults
+    const dbUser = process.env.DB_USER || 'postgres';
+    const dbPassword = process.env.DB_PASSWORD || 'postgres';
+    const dbHost = process.env.DB_HOST || 'localhost';
+    const dbPort = process.env.DB_PORT || 5432;
+
     // First try to create database
     let dbPool = new Pool({
-        user: 'postgres',
-        password: 'postgres',
-        host: 'localhost',
-        port: 5432,
+        user: dbUser,
+        password: dbPassword,
+        host: dbHost,
+        port: dbPort,
         database: 'postgres',
         connectionTimeoutMillis: 5000,
     });
@@ -45,7 +51,13 @@ async function initializeDatabase() {
 
         if (error.code === 'ECONNREFUSED') {
             console.error('\n⚠️  PostgreSQL is not responding');
-            console.error('   Start PostgreSQL: Services > postgresql-x64-18 > Start');
+            console.error('   Make sure PostgreSQL 18 is running');
+            console.error('   Connection: ' + dbHost + ':' + dbPort);
+        }
+
+        if (error.code === '28P01') {
+            console.error('\n⚠️  Authentication failed');
+            console.error('   Check DB_USER and DB_PASSWORD in environment');
         }
 
         process.exit(1);
@@ -55,10 +67,10 @@ async function initializeDatabase() {
 
     // Now connect to the new database and create tables
     let appPool = new Pool({
-        user: 'postgres',
-        password: 'postgres',
-        host: 'localhost',
-        port: 5432,
+        user: dbUser,
+        password: dbPassword,
+        host: dbHost,
+        port: dbPort,
         database: 'blackopspro',
         connectionTimeoutMillis: 5000,
     });
@@ -102,9 +114,17 @@ async function initializeDatabase() {
 
     } catch (error) {
         console.error('❌ Table creation failed:', error.message);
+
+        if (error.code === '28P01') {
+            console.error('   Authentication error - check credentials');
+        }
+
+        if (error.code === '3D000') {
+            console.error('   Database does not exist - ensure previous step completed');
+        }
+
         process.exit(1);
     }
 }
 
 initializeDatabase();
-
