@@ -44,11 +44,9 @@ export default async function OrgPage() {
 
     const org = currentOrgId
         ? await queryOne<Organization>(
-            `SELECT o.*
-             FROM organizations o
-                      JOIN user_organizations uo ON uo.org_id = o.id
-             WHERE uo.user_id = $1
-               AND o.id = $2`,
+            `SELECT o.* FROM organizations o
+             JOIN user_organizations uo ON uo.org_id = o.id
+             WHERE uo.user_id = $1 AND o.id = $2`,
             [user.userId, currentOrgId]
         )
         : await queryOne<Organization>(
@@ -64,10 +62,8 @@ export default async function OrgPage() {
 
     const userRole = resolvedOrgId
         ? await queryOne<UserRole>(
-            `SELECT role
-             FROM user_organizations
-             WHERE user_id = $1
-               AND org_id = $2`,
+            `SELECT role FROM user_organizations
+             WHERE user_id = $1 AND org_id = $2`,
             [user.userId, resolvedOrgId]
         )
         : null;
@@ -145,8 +141,15 @@ export default async function OrgPage() {
                                     href="/tickets"
                                     className="bg-black text-white px-5 py-2.5 rounded-lg hover:bg-gray-800 transition font-medium text-sm"
                                 >
-                                    View All Tickets
-                                </Link>
+                                    View All Tickets</Link>
+                                {role !== 'viewer' && (
+                                    <Link
+                                        href="/audit"
+                                        className="border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg hover:bg-white transition font-medium text-sm"
+                                    >
+                                        Audit Log
+                                    </Link>
+                                )}
                                 {canCreate && (
                                     <Link
                                         href="/tickets/new"

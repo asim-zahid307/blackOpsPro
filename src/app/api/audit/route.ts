@@ -6,6 +6,10 @@ export async function GET(req: NextRequest) {
     try {
         const {orgId, role, user} = await requireOrg();
 
+        if (role === 'viewer') {
+            return NextResponse.json({error: 'Viewers cannot access audit logs'}, {status: 403});
+        }
+
         const {searchParams} = new URL(req.url);
         const limit = Math.min(parseInt(searchParams.get('limit') ?? '50'), 100);
         const offset = parseInt(searchParams.get('offset') ?? '0');
