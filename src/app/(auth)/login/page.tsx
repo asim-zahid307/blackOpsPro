@@ -25,7 +25,7 @@ export default function LoginPage() {
             const data = await response.json();
 
             if (response.ok) {
-                router.push("/org");
+                router.push("/");
             } else {
                 setErrorMsg(data.error);
             }
