@@ -8,26 +8,28 @@ import {
     UpdateTicketInput,
     OrgMember,
 } from '@/types/ticket';
+import {recordEvent} from './timeline';
 
 export function isValidStatusTransition(from: TicketStatus, to: TicketStatus): boolean {
     return STATUS_TRANSITIONS[from].includes(to);
 }
 
 const TICKET_SELECT = `
-    SELECT t.*,
-           u.email AS created_by_email,
-           a.email AS assignee_email,
-           COALESCE(
-                   json_agg(
-                           json_build_object('id', tg.id, 'name', tg.name, 'org_id', tg.org_id)
-                   ) FILTER(WHERE tg.id IS NOT NULL),
-                   '[]'
-           )       AS tags
+    SELECT
+        t.*,
+        u.email AS created_by_email,
+        a.email AS assignee_email,
+        COALESCE(
+            json_agg(
+                json_build_object('id', tg.id, 'name', tg.name, 'org_id', tg.org_id)
+            ) FILTER (WHERE tg.id IS NOT NULL),
+            '[]'
+        ) AS tags
     FROM tickets t
-             LEFT JOIN users u ON u.id = t.created_by
-             LEFT JOIN users a ON a.id = t.assignee_id
-             LEFT JOIN ticket_tags tt ON tt.ticket_id = t.id
-             LEFT JOIN tags tg ON tg.id = tt.tag_id
+    LEFT JOIN users u  ON u.id = t.created_by
+    LEFT JOIN users a  ON a.id = t.assignee_id
+    LEFT JOIN ticket_tags tt ON tt.ticket_id = t.id
+    LEFT JOIN tags tg  ON tg.id = tt.tag_id
 `;
 
 export async function getTickets(orgId: string): Promise<Ticket[]> {
@@ -57,7 +59,8 @@ export async function createTicket(
 ): Promise<Ticket> {
     const result = await query(
         `INSERT INTO tickets (org_id, title, description, severity, assignee_id, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
         [
             orgId,
             input.title,
@@ -74,14 +77,28 @@ export async function createTicket(
         await syncTicketTags(ticket.id, orgId, input.tags);
     }
 
+    // Record creation event
+    await recordEvent({
+        ticketId: ticket.id,
+        orgId,
+        actorId: userId,
+        eventType: 'ticket_created',
+        newValue: input.title,
+    });
+
     return (await getTicketById(ticket.id, orgId)) as Ticket;
 }
 
 export async function updateTicket(
     id: string,
     orgId: string,
+    userId: string,
     input: UpdateTicketInput
 ): Promise<Ticket | null> {
+    // Fetch current state to diff against
+    const existing = await getTicketById(id, orgId);
+    if (!existing) return null;
+
     const fields: string[] = [];
     const values: unknown[] = [];
     let idx = 1;
@@ -121,7 +138,51 @@ export async function updateTicket(
     }
 
     if (input.tags !== undefined) {
+        const oldTags = existing.tags.map(t => t.name).join(', ');
         await syncTicketTags(id, orgId, input.tags);
+        const newTags = input.tags.join(', ');
+        if (oldTags !== newTags) {
+            await recordEvent({
+                ticketId: id,
+                orgId,
+                actorId: userId,
+                eventType: 'tags_changed',
+                oldValue: oldTags || 'none',
+                newValue: newTags || 'none'
+            });
+        }
+    }
+
+    // Record events for what changed
+    if (input.status && input.status !== existing.status) {
+        await recordEvent({
+            ticketId: id,
+            orgId,
+            actorId: userId,
+            eventType: 'status_changed',
+            oldValue: existing.status,
+            newValue: input.status
+        });
+    }
+    if (input.severity !== undefined && input.severity !== existing.severity) {
+        await recordEvent({
+            ticketId: id,
+            orgId,
+            actorId: userId,
+            eventType: 'severity_changed',
+            oldValue: String(existing.severity),
+            newValue: String(input.severity)
+        });
+    }
+    if ('assignee_id' in input && input.assignee_id !== existing.assignee_id) {
+        await recordEvent({
+            ticketId: id,
+            orgId,
+            actorId: userId,
+            eventType: 'assignee_changed',
+            oldValue: existing.assignee_email ?? 'unassigned',
+            newValue: input.assignee_id ?? 'unassigned'
+        });
     }
 
     return getTicketById(id, orgId);
@@ -129,11 +190,9 @@ export async function updateTicket(
 
 export async function softDeleteTicket(id: string, orgId: string): Promise<boolean> {
     const result = await query(
-        `UPDATE tickets
-         SET deleted_at = NOW()
-         WHERE id = $1
-           AND org_id = $2
-           AND deleted_at IS NULL RETURNING id`,
+        `UPDATE tickets SET deleted_at = NOW()
+         WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+         RETURNING id`,
         [id, orgId]
     );
     return result.rows.length > 0;
@@ -143,7 +202,7 @@ export async function getOrgMembers(orgId: string): Promise<OrgMember[]> {
     const result = await query(
         `SELECT uo.user_id, u.email, uo.role
          FROM user_organizations uo
-                  JOIN users u ON u.id = uo.user_id
+         JOIN users u ON u.id = uo.user_id
          WHERE uo.org_id = $1
          ORDER BY u.email`,
         [orgId]
@@ -153,10 +212,7 @@ export async function getOrgMembers(orgId: string): Promise<OrgMember[]> {
 
 export async function getOrgTags(orgId: string): Promise<Tag[]> {
     const result = await query(
-        `SELECT *
-         FROM tags
-         WHERE org_id = $1
-         ORDER BY name`,
+        `SELECT * FROM tags WHERE org_id = $1 ORDER BY name`,
         [orgId]
     );
     return result.rows as Tag[];
