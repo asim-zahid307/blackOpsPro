@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {requireOrg} from '@/lib/orgContext';
 import {getTickets, createTicket} from '@/lib/tickets';
+import {writeAudit} from '@/lib/audit';
 
 export async function GET() {
     try {
@@ -18,10 +19,7 @@ export async function POST(req: NextRequest) {
         const {orgId, role, user} = await requireOrg();
 
         if (role === 'viewer') {
-            return NextResponse.json(
-                {error: 'Viewers cannot create tickets'},
-                {status: 403}
-            );
+            return NextResponse.json({error: 'Viewers cannot create tickets'}, {status: 403});
         }
 
         const body = await req.json() as {
@@ -37,12 +35,8 @@ export async function POST(req: NextRequest) {
         if (!title || typeof title !== 'string' || title.trim() === '') {
             return NextResponse.json({error: 'Title is required'}, {status: 400});
         }
-
         if (!severity || typeof severity !== 'number' || severity < 1 || severity > 5) {
-            return NextResponse.json(
-                {error: 'Severity must be a number between 1 and 5'},
-                {status: 400}
-            );
+            return NextResponse.json({error: 'Severity must be between 1 and 5'}, {status: 400});
         }
 
         const ticket = await createTicket(orgId, user.userId, {
@@ -53,8 +47,16 @@ export async function POST(req: NextRequest) {
             tags,
         });
 
-        console.log(`[tickets] Created ticket ${ticket.id} by user ${user.userId} in org ${orgId}`);
+        await writeAudit({
+            orgId,
+            actorId: user.userId,
+            action: 'ticket.created',
+            entityType: 'ticket',
+            entityId: ticket.id,
+            newData: {title: ticket.title, severity: ticket.severity, status: ticket.status},
+        });
 
+        console.log(`[tickets] Created ticket ${ticket.id} by ${user.userId}`);
         return NextResponse.json(ticket, {status: 201});
     } catch (error) {
         console.error('POST /api/tickets error:', error);

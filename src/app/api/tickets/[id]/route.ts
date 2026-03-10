@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {requireOrg} from '@/lib/orgContext';
 import {getTicketById, updateTicket, softDeleteTicket, isValidStatusTransition} from '@/lib/tickets';
+import {writeAudit} from '@/lib/audit';
 import {TicketStatus} from '@/types/ticket';
 
 interface RouteParams {
@@ -29,6 +30,9 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
             return NextResponse.json({error: 'Viewers cannot edit tickets'}, {status: 403});
         }
 
+        const existing = await getTicketById(id, orgId);
+        if (!existing) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
+
         const body = await req.json() as {
             title?: string;
             description?: string;
@@ -41,9 +45,6 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
         const {title, description, severity, status, assignee_id, tags} = body;
 
         if (status) {
-            const existing = await getTicketById(id, orgId);
-            if (!existing) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
-
             const validStatuses: TicketStatus[] = ['open', 'investigating', 'mitigated', 'resolved'];
             if (!validStatuses.includes(status as TicketStatus)) {
                 return NextResponse.json({error: 'Invalid status value'}, {status: 400});
@@ -61,15 +62,42 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
         }
 
         const ticket = await updateTicket(id, orgId, user.userId, {
-            title,
-            description,
-            severity,
+            title, description, severity,
             status: status as TicketStatus | undefined,
-            assignee_id,
-            tags,
+            assignee_id, tags,
         });
 
         if (!ticket) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
+
+        // Build diff for audit
+        const oldValues: Record<string, unknown> = {};
+        const changes: Record<string, unknown> = {};
+        if (title !== undefined && title !== existing.title) {
+            oldValues.title = existing.title;
+            changes.title = title;
+        }
+        if (status !== undefined && status !== existing.status) {
+            oldValues.status = existing.status;
+            changes.status = status;
+        }
+        if (severity !== undefined && severity !== existing.severity) {
+            oldValues.severity = existing.severity;
+            changes.severity = severity;
+        }
+        if ('assignee_id' in body && assignee_id !== existing.assignee_id) {
+            oldValues.assignee_id = existing.assignee_id;
+            changes.assignee_id = assignee_id;
+        }
+
+        await writeAudit({
+            orgId,
+            actorId: user.userId,
+            action: status && status !== existing.status ? 'ticket.status_changed' : 'ticket.updated',
+            entityType: 'ticket',
+            entityId: id,
+            oldData: oldValues,
+            newData: changes,
+        });
 
         console.log(`[tickets] Updated ticket ${id} by ${user.userId}`);
         return NextResponse.json(ticket);
@@ -88,10 +116,22 @@ export async function DELETE(_req: NextRequest, {params}: RouteParams) {
             return NextResponse.json({error: 'Only admins and owners can delete tickets'}, {status: 403});
         }
 
+        const existing = await getTicketById(id, orgId);
+        if (!existing) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
+
         const deleted = await softDeleteTicket(id, orgId);
         if (!deleted) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
 
-        console.log(`[tickets] Soft deleted ticket ${id} by ${user.userId}`);
+        await writeAudit({
+            orgId,
+            actorId: user.userId,
+            action: 'ticket.deleted',
+            entityType: 'ticket',
+            entityId: id,
+            oldData: {title: existing.title, status: existing.status},
+        });
+
+        console.log(`[tickets] Deleted ticket ${id} by ${user.userId}`);
         return NextResponse.json({message: 'Ticket deleted successfully'});
     } catch (error) {
         console.error('DELETE /api/tickets/[id] error:', error);
