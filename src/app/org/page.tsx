@@ -2,7 +2,9 @@ import {cookies} from "next/headers";
 import {queryOne, query} from "@/lib/db";
 import {requireAuth} from "@/lib/auth";
 import LogoutButton from "@/lib/components/LogoutButton";
+import MemberRoleManager from "@/lib/components/MemberRoleManager";
 import Link from "next/link";
+import {OrgMember} from "@/types/ticket";
 
 interface Organization {
     id: string;
@@ -30,10 +32,31 @@ const ROLE_STYLES: Record<string, string> = {
 
 async function getOrgStats(orgId: string): Promise<OrgStats> {
     const result = await query(
-        `SELECT (SELECT COUNT(*) FROM user_organizations WHERE org_id = $1)::int          AS total_members, (SELECT COUNT(*) FROM tickets WHERE org_id = $1)::int                     AS total_tickets, (SELECT COUNT(*) FROM tickets WHERE org_id = $1 AND status = 'open') ::int AS open_tickets`,
+        `SELECT (SELECT COUNT(*) FROM user_organizations WHERE org_id = $1)::int AS total_members, (SELECT COUNT(*) FROM tickets WHERE org_id = $1 AND deleted_at IS NULL)::int AS total_tickets, (SELECT COUNT(*)
+                                                                                                                                                                                                   FROM tickets
+                                                                                                                                                                                                   WHERE org_id = $1
+                                                                                                                                                                                                     AND status = 'open'
+                                                                                                                                                                                                     AND deleted_at IS NULL) ::int AS open_tickets`,
         [orgId]
     );
     return result.rows[0] as OrgStats;
+}
+
+async function getOrgMembers(orgId: string): Promise<OrgMember[]> {
+    const result = await query(
+        `SELECT uo.user_id, u.email, uo.role
+         FROM user_organizations uo
+                  JOIN users u ON u.id = uo.user_id
+         WHERE uo.org_id = $1
+         ORDER BY CASE uo.role
+                      WHEN 'owner' THEN 1
+                      WHEN 'admin' THEN 2
+                      WHEN 'member' THEN 3
+                      WHEN 'viewer' THEN 4
+                      END, u.email`,
+        [orgId]
+    );
+    return result.rows as OrgMember[];
 }
 
 export default async function OrgPage() {
@@ -72,28 +95,28 @@ export default async function OrgPage() {
         )
         : null;
 
-    const stats = org ? await getOrgStats(org.id) : null;
     const role = userRole?.role ?? 'viewer';
     const canCreate = role !== 'viewer';
+    const canManage = role === 'admin' || role === 'owner';
+
+    const stats = org ? await getOrgStats(org.id) : null;
+    // Only admins and owners can see the full member list
+    const members = (org && canManage) ? await getOrgMembers(org.id) : [];
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200">
 
-            {/* HEADER */}
             <header className="sticky top-0 backdrop-blur-xl bg-white/40 border-b border-white/30 z-10">
                 <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <div
-                            className="h-10 w-10 rounded-xl bg-black text-white flex items-center justify-center font-bold">
-                            BO
+                            className="h-10 w-10 rounded-xl bg-black text-white flex items-center justify-center font-bold">BO
                         </div>
                         <span className="text-lg font-semibold">BlackOps Pro</span>
                     </div>
                     <div className="flex items-center gap-4 flex-wrap">
                         <span className="text-sm hidden sm:block text-gray-600">{user.email}</span>
-                        <Link href="/" className="text-sm text-gray-600 hover:text-black transition">
-                            ← Dashboard
-                        </Link>
+                        <Link href="/" className="text-sm text-gray-600 hover:text-black transition">← Dashboard</Link>
                         <LogoutButton/>
                     </div>
                 </div>
@@ -138,25 +161,37 @@ export default async function OrgPage() {
                         </div>
 
                         {/* Quick actions */}
-                        <div className="rounded-2xl p-8 border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg">
+                        <div
+                            className="rounded-2xl p-8 border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg mb-8">
                             <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
                             <div className="flex flex-wrap gap-3">
-                                <Link
-                                    href="/tickets"
-                                    className="bg-black text-white px-5 py-2.5 rounded-lg hover:bg-gray-800 transition font-medium text-sm"
-                                >
+                                <Link href="/tickets"
+                                      className="bg-black text-white px-5 py-2.5 rounded-lg hover:bg-gray-800 transition font-medium text-sm">
                                     View All Tickets
                                 </Link>
                                 {canCreate && (
-                                    <Link
-                                        href="/tickets/new"
-                                        className="border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg hover:bg-white transition font-medium text-sm"
-                                    >
+                                    <Link href="/tickets/new"
+                                          className="border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg hover:bg-white transition font-medium text-sm">
                                         + New Ticket
+                                    </Link>
+                                )}
+                                {role !== 'viewer' && (
+                                    <Link href="/audit"
+                                          className="border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg hover:bg-white transition font-medium text-sm">
+                                        Audit Log
                                     </Link>
                                 )}
                             </div>
                         </div>
+
+                        {/* Members — only visible to admin/owner */}
+                        {canManage && (
+                            <MemberRoleManager
+                                members={members}
+                                currentUserId={user.userId}
+                                currentUserRole={role}
+                            />
+                        )}
                     </>
                 ) : (
                     <div className="text-center py-20">
