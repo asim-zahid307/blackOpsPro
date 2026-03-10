@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {requireOrg} from '@/lib/orgContext';
-import {getTicketById, updateTicket, isValidStatusTransition} from '@/lib/tickets';
+import {getTicketById, updateTicket, softDeleteTicket, isValidStatusTransition} from '@/lib/tickets';
 import {TicketStatus} from '@/types/ticket';
 
 interface RouteParams {
@@ -30,10 +30,7 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
         const {orgId, role, user} = await requireOrg();
 
         if (role === 'viewer') {
-            return NextResponse.json(
-                {error: 'Viewers cannot edit tickets'},
-                {status: 403}
-            );
+            return NextResponse.json({error: 'Viewers cannot edit tickets'}, {status: 403});
         }
 
         const body = await req.json() as {
@@ -47,7 +44,6 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
 
         const {title, description, severity, status, assignee_id, tags} = body;
 
-        // Validate status transition if status is being changed
         if (status) {
             const existing = await getTicketById(id, orgId);
             if (!existing) {
@@ -68,10 +64,7 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
         }
 
         if (severity !== undefined && (severity < 1 || severity > 5)) {
-            return NextResponse.json(
-                {error: 'Severity must be between 1 and 5'},
-                {status: 400}
-            );
+            return NextResponse.json({error: 'Severity must be between 1 and 5'}, {status: 400});
         }
 
         const ticket = await updateTicket(id, orgId, {
@@ -88,10 +81,36 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
         }
 
         console.log(`[tickets] Updated ticket ${id} by user ${user.userId} in org ${orgId}`);
-
         return NextResponse.json(ticket);
     } catch (error) {
         console.error('PATCH /api/tickets/[id] error:', error);
         return NextResponse.json({error: 'Failed to update ticket'}, {status: 500});
+    }
+}
+
+export async function DELETE(_req: NextRequest, {params}: RouteParams) {
+    try {
+        const {id} = await params;
+        const {orgId, role, user} = await requireOrg();
+
+        // Only owner and admin can delete
+        if (role !== 'owner' && role !== 'admin') {
+            return NextResponse.json(
+                {error: 'Only admins and owners can delete tickets'},
+                {status: 403}
+            );
+        }
+
+        const deleted = await softDeleteTicket(id, orgId);
+
+        if (!deleted) {
+            return NextResponse.json({error: 'Ticket not found'}, {status: 404});
+        }
+
+        console.log(`[tickets] Soft deleted ticket ${id} by user ${user.userId} in org ${orgId}`);
+        return NextResponse.json({message: 'Ticket deleted successfully'});
+    } catch (error) {
+        console.error('DELETE /api/tickets/[id] error:', error);
+        return NextResponse.json({error: 'Failed to delete ticket'}, {status: 500});
     }
 }

@@ -5,8 +5,9 @@ import {notFound} from 'next/navigation';
 import TicketStatusBadge from '@/lib/components/TicketStatusBadge';
 import SeverityBadge from '@/lib/components/SeverityBadge';
 import LogoutButton from '@/lib/components/LogoutButton';
+import DeleteTicketButton from '@/lib/components/DeleteTicketButton';
 import Link from 'next/link';
-import {STATUS_TRANSITIONS} from '@/types/ticket';
+import {STATUS_TRANSITIONS, STATUS_LABELS} from '@/types/ticket';
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -22,6 +23,7 @@ export default async function TicketDetailPage({params}: PageProps) {
     if (!ticket) notFound();
 
     const canEdit = role !== 'viewer';
+    const canDelete = role === 'owner' || role === 'admin';
     const nextStatuses = STATUS_TRANSITIONS[ticket.status];
 
     return (
@@ -47,23 +49,27 @@ export default async function TicketDetailPage({params}: PageProps) {
                 </div>
             </header>
 
-            {/* MAIN */}
             <main className="max-w-5xl mx-auto px-6 py-10">
 
-                {/* Top bar with actions */}
+                {/* Top bar */}
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
                     <div>
                         <p className="text-xs text-gray-400 mb-1">#{ticket.id.slice(0, 8)}</p>
                         <h1 className="text-2xl font-bold text-gray-900">{ticket.title}</h1>
                     </div>
-                    {canEdit && (
-                        <Link
-                            href={`/tickets/${ticket.id}/edit`}
-                            className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition text-sm font-medium"
-                        >
-                            Edit Ticket
-                        </Link>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {canEdit && (
+                            <Link
+                                href={`/tickets/${ticket.id}/edit`}
+                                className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition text-sm font-medium"
+                            >
+                                Edit
+                            </Link>
+                        )}
+                        {canDelete && (
+                            <DeleteTicketButton ticketId={ticket.id}/>
+                        )}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -91,15 +97,17 @@ export default async function TicketDetailPage({params}: PageProps) {
                                     Transition Status
                                 </h2>
                                 <p className="text-xs text-gray-400 mb-3">
-                                    Current: <strong>{ticket.status}</strong> → allowed transitions:
+                                    Current: <strong>{STATUS_LABELS[ticket.status]}</strong> — allowed next:
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {nextStatuses.map(s => (
-                                        <StatusTransitionButton
+                                        <Link
                                             key={s}
-                                            ticketId={ticket.id}
-                                            newStatus={s}
-                                        />
+                                            href={`/tickets/${ticket.id}/edit?status=${s}`}
+                                            className="inline-block px-3 py-1.5 rounded-lg text-xs font-medium transition capitalize bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                        >
+                                            → {STATUS_LABELS[s]}
+                                        </Link>
                                     ))}
                                 </div>
                             </div>
@@ -137,17 +145,13 @@ export default async function TicketDetailPage({params}: PageProps) {
 
                             <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Created</p>
-                                <p className="text-sm text-gray-700">
-                                    {new Date(ticket.created_at).toLocaleString()}
-                                </p>
+                                <p className="text-sm text-gray-700">{new Date(ticket.created_at).toLocaleString()}</p>
                             </div>
 
                             <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Last
                                     Updated</p>
-                                <p className="text-sm text-gray-700">
-                                    {new Date(ticket.updated_at).toLocaleString()}
-                                </p>
+                                <p className="text-sm text-gray-700">{new Date(ticket.updated_at).toLocaleString()}</p>
                             </div>
 
                             {ticket.tags && ticket.tags.length > 0 && (
@@ -155,10 +159,8 @@ export default async function TicketDetailPage({params}: PageProps) {
                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tags</p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {ticket.tags.map(tag => (
-                                            <span
-                                                key={tag.id}
-                                                className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
-                                            >
+                                            <span key={tag.id}
+                                                  className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
                                                 {tag.name}
                                             </span>
                                         ))}
@@ -172,41 +174,5 @@ export default async function TicketDetailPage({params}: PageProps) {
                 </div>
             </main>
         </div>
-    );
-}
-
-// Inline client component for status transitions
-// (small enough to keep here; avoids an extra file)
-function StatusTransitionButton({
-                                    ticketId,
-                                    newStatus,
-                                }: {
-    ticketId: string;
-    newStatus: string;
-}) {
-    const STATUS_BUTTON_STYLES: Record<string, string> = {
-        open: 'bg-blue-100 text-blue-800 hover:bg-blue-200',
-        investigating: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200',
-        mitigated: 'bg-orange-100 text-orange-800 hover:bg-orange-200',
-        resolved: 'bg-green-100 text-green-800 hover:bg-green-200',
-    };
-
-    const style = STATUS_BUTTON_STYLES[newStatus] ?? 'bg-gray-100 text-gray-700 hover:bg-gray-200';
-
-    return (
-        <form
-            action={async () => {
-                "use server";
-                // Status transitions are handled client-side via edit page
-                // This is a placeholder — see /tickets/[id]/edit for full flow
-            }}
-        >
-            <Link
-                href={`/tickets/${ticketId}/edit?status=${newStatus}`}
-                className={`inline-block px-3 py-1.5 rounded-lg text-xs font-medium transition capitalize ${style}`}
-            >
-                → {newStatus}
-            </Link>
-        </form>
     );
 }

@@ -33,7 +33,7 @@ const TICKET_SELECT = `
 export async function getTickets(orgId: string): Promise<Ticket[]> {
     const result = await query(
         `${TICKET_SELECT}
-         WHERE t.org_id = $1
+         WHERE t.org_id = $1 AND t.deleted_at IS NULL
          GROUP BY t.id, u.email, a.email
          ORDER BY t.updated_at DESC, t.id DESC`,
         [orgId]
@@ -44,7 +44,7 @@ export async function getTickets(orgId: string): Promise<Ticket[]> {
 export async function getTicketById(id: string, orgId: string): Promise<Ticket | null> {
     return queryOne<Ticket>(
         `${TICKET_SELECT}
-         WHERE t.id = $1 AND t.org_id = $2
+         WHERE t.id = $1 AND t.org_id = $2 AND t.deleted_at IS NULL
          GROUP BY t.id, u.email, a.email`,
         [id, orgId]
     );
@@ -74,7 +74,6 @@ export async function createTicket(
         await syncTicketTags(ticket.id, orgId, input.tags);
     }
 
-    // Return full ticket with joins
     return (await getTicketById(ticket.id, orgId)) as Ticket;
 }
 
@@ -115,7 +114,8 @@ export async function updateTicket(
             `UPDATE tickets
              SET ${fields.join(', ')}
              WHERE id = $${idx++}
-               AND org_id = $${idx}`,
+               AND org_id = $${idx}
+               AND deleted_at IS NULL`,
             values
         );
     }
@@ -125,6 +125,18 @@ export async function updateTicket(
     }
 
     return getTicketById(id, orgId);
+}
+
+export async function softDeleteTicket(id: string, orgId: string): Promise<boolean> {
+    const result = await query(
+        `UPDATE tickets
+         SET deleted_at = NOW()
+         WHERE id = $1
+           AND org_id = $2
+           AND deleted_at IS NULL RETURNING id`,
+        [id, orgId]
+    );
+    return result.rows.length > 0;
 }
 
 export async function getOrgMembers(orgId: string): Promise<OrgMember[]> {
@@ -157,7 +169,6 @@ async function syncTicketTags(ticketId: string, orgId: string, tagNames: string[
         return;
     }
 
-    // Upsert all tags
     for (const name of cleaned) {
         await query(
             `INSERT INTO tags (org_id, name)
@@ -166,7 +177,6 @@ async function syncTicketTags(ticketId: string, orgId: string, tagNames: string[
         );
     }
 
-    // Fetch their IDs
     const placeholders = cleaned.map((_, i) => `$${i + 2}`).join(', ');
     const tagResult = await query(
         `SELECT id
@@ -177,7 +187,6 @@ async function syncTicketTags(ticketId: string, orgId: string, tagNames: string[
     );
     const tagIds: string[] = tagResult.rows.map((r: { id: string }) => r.id);
 
-    // Replace ticket tags
     await query('DELETE FROM ticket_tags WHERE ticket_id = $1', [ticketId]);
     for (const tagId of tagIds) {
         await query(
