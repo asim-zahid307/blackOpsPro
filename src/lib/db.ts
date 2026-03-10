@@ -15,16 +15,28 @@ pool.on('error', (err) => {
 (async () => {
     try {
         const migrationsDir = path.join(process.cwd(), 'migrations');
+
         if (fs.existsSync(migrationsDir)) {
             const files = fs.readdirSync(migrationsDir).sort();
+
             const client = await pool.connect();
+
             try {
                 for (const file of files) {
-                    if (file.endsWith('.sql')) {
-                        const sqlPath = path.join(migrationsDir, file);
-                        const sql = fs.readFileSync(sqlPath, 'utf-8');
+                    if (!file.endsWith('.sql')) continue;
+
+                    const sqlPath = path.join(migrationsDir, file);
+                    const sql = fs.readFileSync(sqlPath, 'utf-8');
+
+                    try {
                         await client.query(sql);
                         console.log(`✓ Migration executed: ${file}`);
+                    } catch (err: any) {
+                        if (err.code === '42710' || err.code === '42P07') {
+                            console.log(`↺ Migration skipped (already exists): ${file}`);
+                        } else {
+                            throw err;
+                        }
                     }
                 }
             } finally {
