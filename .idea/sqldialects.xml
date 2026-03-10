@@ -8,5 +8,6 @@
     <file url="file://$PROJECT_DIR$/migrations/011_create_timeline.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/migrations/012_create_audit_log.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/migrations/013_tickets_fulltext_search.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/migrations/014_create_invites.sql" dialect="GenericSQL" />
   </component>
 </project>
