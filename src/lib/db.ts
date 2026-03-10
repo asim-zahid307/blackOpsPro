@@ -10,59 +10,101 @@ pool.on('error', (err) => {
     console.error('Unexpected error on idle client', err);
 });
 
-// Run migrations on startup (only once per process)
-let migrationsDone = false;
+// These Postgres error codes are safe to ignore — object already exists
+const IGNORABLE_PG_CODES = new Set([
+    '42710', // duplicate_object (policy, type, etc already exists)
+    '42P07', // duplicate_table
+    '42701', // duplicate_column
+    '23505', // unique_violation (duplicate index)
+    '42P16', // invalid_table_definition (index already exists)
+]);
 
-export async function runMigrations() {
-    if (migrationsDone) return;
-    migrationsDone = true;
+let migrationPromise: Promise<void> | null = null;
 
+async function applyMigrations(): Promise<void> {
+    const client = await pool.connect();
     try {
-        const migrationsDir = path.join(process.cwd(), 'migrations');
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS schema_migrations
+            (
+                filename
+                VARCHAR
+            (
+                255
+            ) PRIMARY KEY,
+                applied_at TIMESTAMP DEFAULT NOW
+            (
+            )
+                )
+        `);
 
+        const migrationsDir = path.join(process.cwd(), 'migrations');
         if (!fs.existsSync(migrationsDir)) return;
 
         const files = fs.readdirSync(migrationsDir).sort();
-        const client = await pool.connect();
 
-        try {
-            for (const file of files) {
-                if (!file.endsWith('.sql')) continue;
+        for (const file of files) {
+            if (!file.endsWith('.sql')) continue;
 
-                const sqlPath = path.join(migrationsDir, file);
-                const sql = fs.readFileSync(sqlPath, 'utf-8');
+            const already = await client.query(
+                'SELECT filename FROM schema_migrations WHERE filename = $1',
+                [file]
+            );
+            if (already.rows.length > 0) {
+                console.log(`↺ Already applied, skipping: ${file}`);
+                continue;
+            }
 
-                try {
-                    await client.query(sql);
-                    console.log(`✓ Migration executed: ${file}`);
-                } catch (err: unknown) {
-                    // Already exists errors — safe to skip
-                    const pgErr = err as { code?: string };
-                    if (pgErr.code && ['42710', '42P07', '42701', '23505'].includes(pgErr.code)) {
-                        console.log(`↺ Migration skipped (already exists): ${file}`);
-                    } else {
-                        throw err;
-                    }
+            const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+
+            try {
+                await client.query('BEGIN');
+                await client.query(sql);
+                await client.query(
+                    'INSERT INTO schema_migrations (filename) VALUES ($1)',
+                    [file]
+                );
+                await client.query('COMMIT');
+                console.log(`✓ Migration applied: ${file}`);
+            } catch (err: unknown) {
+                await client.query('ROLLBACK');
+                const pgErr = err as { code?: string; message?: string };
+
+                if (pgErr.code && IGNORABLE_PG_CODES.has(pgErr.code)) {
+                    // Object already exists — mark as applied and move on
+                    console.log(`↺ Migration skipped (already exists): ${file}`);
+                    await client.query(
+                        'INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING',
+                        [file]
+                    );
+                } else {
+                    console.error(`✗ Migration failed: ${file} — ${pgErr.message ?? String(err)}`);
+                    throw err;
                 }
             }
-        } finally {
-            client.release();
         }
-    } catch (error) {
-        console.error('Migration error:', error);
+    } finally {
+        client.release();
     }
 }
 
-// Auto-run migrations when this module is first loaded
-runMigrations();
+export function ensureMigrations(): Promise<void> {
+    if (!migrationPromise) {
+        migrationPromise = applyMigrations().catch((err) => {
+            migrationPromise = null;
+            throw err;
+        });
+    }
+    return migrationPromise;
+}
+
+ensureMigrations().catch(err => console.error('Migration startup error:', err));
 
 export async function getClient(): Promise<PoolClient> {
+    await ensureMigrations();
     return pool.connect();
 }
 
-/**
- * Run a query without RLS context (for internal/admin operations only)
- */
 export async function query(text: string, params?: unknown[]): Promise<QueryResult> {
     const client = await getClient();
     try {
@@ -72,10 +114,6 @@ export async function query(text: string, params?: unknown[]): Promise<QueryResu
     }
 }
 
-/**
- * Run a query WITH RLS context — sets app.current_user_id so Postgres
- * RLS policies can filter rows by the authenticated user.
- */
 export async function queryAsUser(
     userId: string,
     text: string,
@@ -83,7 +121,6 @@ export async function queryAsUser(
 ): Promise<QueryResult> {
     const client = await getClient();
     try {
-        // Set the user context for RLS policies
         await client.query(`SET LOCAL app.current_user_id = '${userId}'`);
         return await client.query(text, params);
     } finally {
@@ -93,7 +130,7 @@ export async function queryAsUser(
 
 export async function queryOne<T = unknown>(text: string, params?: unknown[]): Promise<T | null> {
     const result = await query(text, params);
-    return (result.rows[0] as T) || null;
+    return (result.rows[0] as T) ?? null;
 }
 
 export async function queryOneAsUser<T = unknown>(
@@ -102,7 +139,7 @@ export async function queryOneAsUser<T = unknown>(
     params?: unknown[]
 ): Promise<T | null> {
     const result = await queryAsUser(userId, text, params);
-    return (result.rows[0] as T) || null;
+    return (result.rows[0] as T) ?? null;
 }
 
 export default pool;

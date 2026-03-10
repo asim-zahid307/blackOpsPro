@@ -7,7 +7,6 @@ const ORG_COOKIE = "current_org_id";
 
 export async function setCurrentOrg(orgId: string) {
     const cookieStore = await cookies();
-
     cookieStore.set(ORG_COOKIE, orgId, {
         httpOnly: true,
         sameSite: "lax",
@@ -15,31 +14,44 @@ export async function setCurrentOrg(orgId: string) {
     });
 }
 
-export async function getCurrentOrg() {
+export async function getCurrentOrg(): Promise<string | null> {
     const cookieStore = await cookies();
-    const orgId = cookieStore.get(ORG_COOKIE)?.value;
-
-    if (!orgId) return null;
-
-    return orgId;
+    return cookieStore.get(ORG_COOKIE)?.value ?? null;
 }
 
 export async function requireOrg() {
     const user = await requireAuth();
     const orgId = await getCurrentOrg();
 
-    if (!orgId) {
-        throw new Error("Organization not selected");
+    // If no org cookie, auto-select the user's first org (read-only, no cookie write)
+    let resolvedOrgId = orgId;
+
+    if (!resolvedOrgId) {
+        const firstOrg = await queryOne<{ org_id: string }>(
+            `SELECT org_id
+             FROM user_organizations
+             WHERE user_id = $1
+             ORDER BY created_at ASC LIMIT 1`,
+            [user.userId]
+        );
+
+        if (!firstOrg) {
+            throw new Error("User does not belong to any organization");
+        }
+
+        resolvedOrgId = firstOrg.org_id;
+        // NOTE: We do NOT set the cookie here — cookies can only be written
+        // in Route Handlers or Server Actions, not Server Components.
+        // The cookie gets set properly on login/signup.
     }
 
-    const membership: UserOrganization | null = await queryOne(
-        `
-            SELECT role
-            FROM user_organizations
-            WHERE user_id = $1
-              AND org_id = $2
-        `,
-        [user.userId, orgId]
+    // Verify user is actually a member of this org
+    const membership = await queryOne<UserOrganization>(
+        `SELECT role
+         FROM user_organizations
+         WHERE user_id = $1
+           AND org_id = $2`,
+        [user.userId, resolvedOrgId]
     );
 
     if (!membership) {
@@ -47,7 +59,7 @@ export async function requireOrg() {
     }
 
     return {
-        orgId,
+        orgId: resolvedOrgId,
         role: membership.role,
         user,
     };

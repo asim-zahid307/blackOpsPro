@@ -1,6 +1,5 @@
-// src/app/org/page.tsx
 import {cookies} from "next/headers";
-import {queryOne} from "@/lib/db";
+import {queryOne, query} from "@/lib/db";
 import {requireAuth} from "@/lib/auth";
 import LogoutButton from "@/lib/components/LogoutButton";
 import Link from "next/link";
@@ -12,40 +11,76 @@ interface Organization {
     updated_at: string;
 }
 
+interface OrgStats {
+    total_members: number;
+    total_tickets: number;
+    open_tickets: number;
+}
+
+interface UserRole {
+    role: string;
+}
+
+const ROLE_STYLES: Record<string, string> = {
+    owner: 'bg-purple-100 text-purple-800',
+    admin: 'bg-blue-100 text-blue-800',
+    member: 'bg-green-100 text-green-800',
+    viewer: 'bg-gray-100 text-gray-600',
+};
+
+async function getOrgStats(orgId: string): Promise<OrgStats> {
+    const result = await query(
+        `SELECT (SELECT COUNT(*) FROM user_organizations WHERE org_id = $1)::int          AS total_members, (SELECT COUNT(*) FROM tickets WHERE org_id = $1)::int                     AS total_tickets, (SELECT COUNT(*) FROM tickets WHERE org_id = $1 AND status = 'open') ::int AS open_tickets`,
+        [orgId]
+    );
+    return result.rows[0] as OrgStats;
+}
+
 export default async function OrgPage() {
     const user = await requireAuth();
 
-    // Read current org from cookie
     const cookieStore = await cookies();
     const currentOrgId = cookieStore.get("current_org_id")?.value;
 
-    // If no org selected yet, we can pick first org for this user
     const org = currentOrgId
         ? await queryOne<Organization>(
-            `
-                SELECT o.*
-                FROM organizations o
-                         JOIN user_organizations uo ON uo.org_id = o.id
-                WHERE uo.user_id = $1
-                  AND o.id = $2
-            `,
+            `SELECT o.*
+             FROM organizations o
+                      JOIN user_organizations uo ON uo.org_id = o.id
+             WHERE uo.user_id = $1
+               AND o.id = $2`,
             [user.userId, currentOrgId]
         )
         : await queryOne<Organization>(
-            `
-                SELECT o.*
-                FROM organizations o
-                         JOIN user_organizations uo ON uo.org_id = o.id
-                WHERE uo.user_id = $1
-                ORDER BY o.name LIMIT 1
-            `,
+            `SELECT o.*
+             FROM organizations o
+                      JOIN user_organizations uo ON uo.org_id = o.id
+             WHERE uo.user_id = $1
+             ORDER BY o.name LIMIT 1`,
             [user.userId]
         );
 
+    const resolvedOrgId = org?.id ?? currentOrgId;
+
+    const userRole = resolvedOrgId
+        ? await queryOne<UserRole>(
+            `SELECT role
+             FROM user_organizations
+             WHERE user_id = $1
+               AND org_id = $2`,
+            [user.userId, resolvedOrgId]
+        )
+        : null;
+
+    const stats = org ? await getOrgStats(org.id) : null;
+    const role = userRole?.role ?? 'viewer';
+    const canCreate = role !== 'viewer';
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200">
+
             {/* HEADER */}
-            <header className="sticky top-0 backdrop-blur-xl bg-white/40 border-b border-white/30">
+            <header className="sticky top-0 backdrop-blur-xl bg-white/40 border-b border-white/30 z-10">
                 <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <div
@@ -55,39 +90,80 @@ export default async function OrgPage() {
                         <span className="text-lg font-semibold">BlackOps Pro</span>
                     </div>
                     <div className="flex items-center gap-4 flex-wrap">
-                        <span className="text-sm hidden sm:block">{user.email}</span>
-                        <Link
-                            href="/"
-                            className="bg-black text-white px-4 py-2 rounded hover:bg-gray-800 inline-block text-center"
-                        >
-                            Dashboard
+                        <span className="text-sm hidden sm:block text-gray-600">{user.email}</span>
+                        <Link href="/" className="text-sm text-gray-600 hover:text-black transition">
+                            ← Dashboard
                         </Link>
                         <LogoutButton/>
                     </div>
                 </div>
             </header>
 
-            {/* MAIN */}
             <main className="max-w-7xl mx-auto px-6 py-12">
-                {org ? (
+                {org && stats ? (
                     <>
-                        <h1 className="text-3xl font-bold mb-2">
-                            Organization: <span className="text-blue-600">{org.name}</span>
-                        </h1>
-                        <p className="text-gray-600 mb-8">
-                            Details of the organization you belong to.
-                        </p>
-
-                        <div className="rounded-2xl p-8 border bg-white/40 backdrop-blur-xl shadow-lg text-center">
-                            <div
-                                className="h-12 w-12 mx-auto rounded-xl bg-black text-white flex items-center justify-center font-semibold mb-4">
-                                ORG
+                        {/* Org header with role badge */}
+                        <div className="mb-10 flex flex-wrap items-center gap-4">
+                            <div>
+                                <p className="text-sm text-gray-400 mb-1">Organization</p>
+                                <h1 className="text-3xl font-bold text-gray-900">{org.name}</h1>
+                                <p className="text-sm text-gray-500 mt-1">ID: {org.id}</p>
                             </div>
-                            <p className="text-sm text-gray-600">Organization ID: {org.id}</p>
+                            <div className="ml-auto text-right">
+                                <p className="text-xs text-gray-400 mb-1">Your Role</p>
+                                <span
+                                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold capitalize ${ROLE_STYLES[role] ?? 'bg-gray-100 text-gray-600'}`}>
+                                    {role}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Stats cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+                            <div
+                                className="rounded-2xl p-6 border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg">
+                                <p className="text-sm font-medium text-gray-500 mb-1">Total Members</p>
+                                <p className="text-4xl font-bold text-gray-900">{stats.total_members}</p>
+                            </div>
+                            <div
+                                className="rounded-2xl p-6 border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg">
+                                <p className="text-sm font-medium text-gray-500 mb-1">Total Tickets</p>
+                                <p className="text-4xl font-bold text-gray-900">{stats.total_tickets}</p>
+                            </div>
+                            <div
+                                className="rounded-2xl p-6 border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg">
+                                <p className="text-sm font-medium text-gray-500 mb-1">Open Tickets</p>
+                                <p className="text-4xl font-bold text-blue-600">{stats.open_tickets}</p>
+                            </div>
+                        </div>
+
+                        {/* Quick actions */}
+                        <div className="rounded-2xl p-8 border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+                            <div className="flex flex-wrap gap-3">
+                                <Link
+                                    href="/tickets"
+                                    className="bg-black text-white px-5 py-2.5 rounded-lg hover:bg-gray-800 transition font-medium text-sm"
+                                >
+                                    View All Tickets
+                                </Link>
+                                {canCreate && (
+                                    <Link
+                                        href="/tickets/new"
+                                        className="border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg hover:bg-white transition font-medium text-sm"
+                                    >
+                                        + New Ticket
+                                    </Link>
+                                )}
+                            </div>
                         </div>
                     </>
                 ) : (
-                    <p>No organization assigned or access denied.</p>
+                    <div className="text-center py-20">
+                        <p className="text-gray-500 text-lg">No organization assigned or access denied.</p>
+                        <Link href="/" className="text-black underline text-sm mt-4 inline-block">← Back to
+                            Dashboard</Link>
+                    </div>
                 )}
             </main>
         </div>
