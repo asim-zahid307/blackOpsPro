@@ -5,17 +5,17 @@ import Link from "next/link";
 import {AuditLog} from "@/types/audit";
 
 const ACTION_LABELS: Record<string, string> = {
-    'ticket.created': '🎫 Ticket Created',
-    'ticket.updated': '✏️ Ticket Updated',
-    'ticket.deleted': '🗑️ Ticket Deleted',
-    'ticket.status_changed': '🔄 Status Changed',
-    'ticket.assignee_changed': '👤 Assignee Changed',
-    'ticket.severity_changed': '⚡ Severity Changed',
-    'ticket.tags_changed': '🏷️ Tags Changed',
-    'comment.created': '💬 Comment Added',
-    'org.member_invited': '📧 Member Invited',
-    'org.member_removed': '❌ Member Removed',
-    'org.role_changed': '🔑 Role Changed',
+    'ticket.created': 'Ticket Created',
+    'ticket.updated': 'Ticket Updated',
+    'ticket.deleted': 'Ticket Deleted',
+    'ticket.status_changed': 'Status Changed',
+    'ticket.assignee_changed': 'Assignee Changed',
+    'ticket.severity_changed': 'Severity Changed',
+    'ticket.tags_changed': 'Tags Changed',
+    'comment.created': 'Comment Added',
+    'org.member_invited': 'Member Invited',
+    'org.member_removed': 'Member Removed',
+    'org.role_changed': 'Role Changed',
 };
 
 const ACTION_STYLES: Record<string, string> = {
@@ -153,10 +153,9 @@ export default function AuditPage() {
                                             {log.entity_id && (
                                                 <p className="text-xs text-gray-400 font-mono mt-0.5">
                                                     {log.entity_type === 'ticket' ? (
-                                                        <Link href={`/tickets/${log.entity_id}`}
-                                                              className="hover:underline text-blue-600">
+                                                        <p className="text-blue-600">
                                                             #{log.entity_id.slice(0, 8)}
-                                                        </Link>
+                                                        </p>
                                                     ) : (
                                                         `#${log.entity_id.slice(0, 8)}`
                                                     )}
