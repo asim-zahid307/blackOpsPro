@@ -1,13 +1,30 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {requireOrg} from '@/lib/orgContext';
-import {getTickets, createTicket} from '@/lib/tickets';
+import {createTicket} from '@/lib/tickets';
+import {searchTickets} from '@/lib/ticketSearch';
 import {writeAudit} from '@/lib/audit';
+import {TicketStatus} from '@/types/ticket';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     try {
         const {orgId} = await requireOrg();
-        const tickets = await getTickets(orgId);
-        return NextResponse.json(tickets);
+        const {searchParams} = new URL(req.url);
+
+        const filters = {
+            search: searchParams.get('search') ?? undefined,
+            status: searchParams.get('status') as TicketStatus | undefined,
+            severity: searchParams.get('severity') ? Number(searchParams.get('severity')) : undefined,
+            assignee_id: searchParams.get('assignee_id') ?? undefined,
+            tag: searchParams.get('tag') ?? undefined,
+            date_from: searchParams.get('date_from') ?? undefined,
+            date_to: searchParams.get('date_to') ?? undefined,
+        };
+
+        const cursor = searchParams.get('cursor') ?? undefined;
+        const limit = Math.min(parseInt(searchParams.get('limit') ?? '20'), 100);
+
+        const result = await searchTickets(orgId, filters, {cursor, limit});
+        return NextResponse.json(result);
     } catch (error) {
         console.error('GET /api/tickets error:', error);
         return NextResponse.json({error: 'Failed to fetch tickets'}, {status: 500});
@@ -40,11 +57,7 @@ export async function POST(req: NextRequest) {
         }
 
         const ticket = await createTicket(orgId, user.userId, {
-            title: title.trim(),
-            description,
-            severity,
-            assignee_id,
-            tags,
+            title: title.trim(), description, severity, assignee_id, tags,
         });
 
         await writeAudit({
