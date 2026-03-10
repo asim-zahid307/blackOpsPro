@@ -32,11 +32,11 @@ const ROLE_STYLES: Record<string, string> = {
 
 async function getOrgStats(orgId: string): Promise<OrgStats> {
     const result = await query(
-        `SELECT (SELECT COUNT(*) FROM user_organizations WHERE org_id = $1)::int          AS total_members, (SELECT COUNT(*) FROM tickets WHERE org_id = $1 AND deleted_at IS NULL)::int AS total_tickets, (SELECT COUNT(*)
-                                                                                                                                                                                                            FROM tickets
-                                                                                                                                                                                                            WHERE org_id = $1
-                                                                                                                                                                                                              AND status = 'open'
-                                                                                                                                                                                                              AND deleted_at IS NULL) ::int AS open_tickets`,
+        `SELECT (SELECT COUNT(*) FROM user_organizations WHERE org_id = $1)::int AS total_members, (SELECT COUNT(*) FROM tickets WHERE org_id = $1 AND deleted_at IS NULL)::int AS total_tickets, (SELECT COUNT(*)
+                                                                                                                                                                                                   FROM tickets
+                                                                                                                                                                                                   WHERE org_id = $1
+                                                                                                                                                                                                     AND status = 'open'
+                                                                                                                                                                                                     AND deleted_at IS NULL) ::int AS open_tickets`,
         [orgId]
     );
     return result.rows[0] as OrgStats;
@@ -95,10 +95,13 @@ export default async function OrgPage() {
         )
         : null;
 
-    const stats = org ? await getOrgStats(org.id) : null;
-    const members = org ? await getOrgMembers(org.id) : [];
     const role = userRole?.role ?? 'viewer';
     const canCreate = role !== 'viewer';
+    const canManage = role === 'admin' || role === 'owner';
+
+    const stats = org ? await getOrgStats(org.id) : null;
+    // Only admins and owners can see the full member list
+    const members = (org && canManage) ? await getOrgMembers(org.id) : [];
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200">
@@ -181,12 +184,14 @@ export default async function OrgPage() {
                             </div>
                         </div>
 
-                        {/* Members list with role manager */}
-                        <MemberRoleManager
-                            members={members}
-                            currentUserId={user.userId}
-                            currentUserRole={role}
-                        />
+                        {/* Members — only visible to admin/owner */}
+                        {canManage && (
+                            <MemberRoleManager
+                                members={members}
+                                currentUserId={user.userId}
+                                currentUserRole={role}
+                            />
+                        )}
                     </>
                 ) : (
                     <div className="text-center py-20">
