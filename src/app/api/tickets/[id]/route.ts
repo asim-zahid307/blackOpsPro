@@ -11,12 +11,8 @@ export async function GET(_req: NextRequest, {params}: RouteParams) {
     try {
         const {id} = await params;
         const {orgId} = await requireOrg();
-
         const ticket = await getTicketById(id, orgId);
-        if (!ticket) {
-            return NextResponse.json({error: 'Ticket not found'}, {status: 404});
-        }
-
+        if (!ticket) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
         return NextResponse.json(ticket);
     } catch (error) {
         console.error('GET /api/tickets/[id] error:', error);
@@ -46,15 +42,12 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
 
         if (status) {
             const existing = await getTicketById(id, orgId);
-            if (!existing) {
-                return NextResponse.json({error: 'Ticket not found'}, {status: 404});
-            }
+            if (!existing) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
 
             const validStatuses: TicketStatus[] = ['open', 'investigating', 'mitigated', 'resolved'];
             if (!validStatuses.includes(status as TicketStatus)) {
                 return NextResponse.json({error: 'Invalid status value'}, {status: 400});
             }
-
             if (!isValidStatusTransition(existing.status, status as TicketStatus)) {
                 return NextResponse.json(
                     {error: `Cannot transition from "${existing.status}" to "${status}"`},
@@ -67,7 +60,7 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
             return NextResponse.json({error: 'Severity must be between 1 and 5'}, {status: 400});
         }
 
-        const ticket = await updateTicket(id, orgId, {
+        const ticket = await updateTicket(id, orgId, user.userId, {
             title,
             description,
             severity,
@@ -76,11 +69,9 @@ export async function PATCH(req: NextRequest, {params}: RouteParams) {
             tags,
         });
 
-        if (!ticket) {
-            return NextResponse.json({error: 'Ticket not found'}, {status: 404});
-        }
+        if (!ticket) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
 
-        console.log(`[tickets] Updated ticket ${id} by user ${user.userId} in org ${orgId}`);
+        console.log(`[tickets] Updated ticket ${id} by ${user.userId}`);
         return NextResponse.json(ticket);
     } catch (error) {
         console.error('PATCH /api/tickets/[id] error:', error);
@@ -93,21 +84,14 @@ export async function DELETE(_req: NextRequest, {params}: RouteParams) {
         const {id} = await params;
         const {orgId, role, user} = await requireOrg();
 
-        // Only owner and admin can delete
         if (role !== 'owner' && role !== 'admin') {
-            return NextResponse.json(
-                {error: 'Only admins and owners can delete tickets'},
-                {status: 403}
-            );
+            return NextResponse.json({error: 'Only admins and owners can delete tickets'}, {status: 403});
         }
 
         const deleted = await softDeleteTicket(id, orgId);
+        if (!deleted) return NextResponse.json({error: 'Ticket not found'}, {status: 404});
 
-        if (!deleted) {
-            return NextResponse.json({error: 'Ticket not found'}, {status: 404});
-        }
-
-        console.log(`[tickets] Soft deleted ticket ${id} by user ${user.userId} in org ${orgId}`);
+        console.log(`[tickets] Soft deleted ticket ${id} by ${user.userId}`);
         return NextResponse.json({message: 'Ticket deleted successfully'});
     } catch (error) {
         console.error('DELETE /api/tickets/[id] error:', error);

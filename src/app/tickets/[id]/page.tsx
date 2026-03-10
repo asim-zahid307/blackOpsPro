@@ -6,6 +6,7 @@ import TicketStatusBadge from '@/lib/components/TicketStatusBadge';
 import SeverityBadge from '@/lib/components/SeverityBadge';
 import LogoutButton from '@/lib/components/LogoutButton';
 import DeleteTicketButton from '@/lib/components/DeleteTicketButton';
+import TicketTimeline from '@/lib/components/TicketTimeline';
 import Link from 'next/link';
 import {STATUS_TRANSITIONS, STATUS_LABELS} from '@/types/ticket';
 
@@ -24,6 +25,7 @@ export default async function TicketDetailPage({params}: PageProps) {
 
     const canEdit = role !== 'viewer';
     const canDelete = role === 'owner' || role === 'admin';
+    const canComment = role !== 'viewer';
     const nextStatuses = STATUS_TRANSITIONS[ticket.status];
 
     return (
@@ -31,25 +33,23 @@ export default async function TicketDetailPage({params}: PageProps) {
 
             {/* NAVBAR */}
             <header className="sticky top-0 backdrop-blur-xl bg-white/40 border-b border-white/30 z-10">
-                <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+                <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div
-                            className="h-10 w-10 rounded-xl bg-black text-white flex items-center justify-center font-bold">
-                            BO
+                            className="h-10 w-10 rounded-xl bg-black text-white flex items-center justify-center font-bold">BO
                         </div>
                         <span className="text-lg font-semibold text-gray-800">BlackOps Pro</span>
                     </div>
                     <div className="flex items-center gap-4">
                         <span className="text-sm text-gray-600 hidden sm:block">{user.email}</span>
-                        <Link href="/tickets" className="text-sm text-gray-600 hover:text-black transition">
-                            ← Tickets
-                        </Link>
+                        <Link href="/tickets" className="text-sm text-gray-600 hover:text-black transition">←
+                            Tickets</Link>
                         <LogoutButton/>
                     </div>
                 </div>
             </header>
 
-            <main className="max-w-5xl mx-auto px-6 py-10">
+            <main className="max-w-6xl mx-auto px-6 py-10">
 
                 {/* Top bar */}
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
@@ -66,24 +66,20 @@ export default async function TicketDetailPage({params}: PageProps) {
                                 Edit
                             </Link>
                         )}
-                        {canDelete && (
-                            <DeleteTicketButton ticketId={ticket.id}/>
-                        )}
+                        {canDelete && <DeleteTicketButton ticketId={ticket.id}/>}
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                    {/* Main content */}
+                    {/* Left — description + transitions + timeline */}
                     <div className="lg:col-span-2 space-y-6">
 
                         {/* Description */}
                         <div className="rounded-2xl border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg p-6">
                             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Description</h2>
                             {ticket.description ? (
-                                <p className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
-                                    {ticket.description}
-                                </p>
+                                <p className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
                             ) : (
                                 <p className="text-gray-400 text-sm italic">No description provided.</p>
                             )}
@@ -93,9 +89,8 @@ export default async function TicketDetailPage({params}: PageProps) {
                         {canEdit && nextStatuses.length > 0 && (
                             <div
                                 className="rounded-2xl border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg p-6">
-                                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                                    Transition Status
-                                </h2>
+                                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Transition
+                                    Status</h2>
                                 <p className="text-xs text-gray-400 mb-3">
                                     Current: <strong>{STATUS_LABELS[ticket.status]}</strong> — allowed next:
                                 </p>
@@ -113,9 +108,16 @@ export default async function TicketDetailPage({params}: PageProps) {
                             </div>
                         )}
 
+                        {/* Timeline + Comments */}
+                        <TicketTimeline
+                            ticketId={ticket.id}
+                            canComment={canComment}
+                            currentUserEmail={user.email}
+                        />
+
                     </div>
 
-                    {/* Sidebar */}
+                    {/* Right — metadata sidebar */}
                     <div className="space-y-4">
                         <div
                             className="rounded-2xl border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg p-6 space-y-4">
