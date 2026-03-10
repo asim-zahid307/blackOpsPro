@@ -17,13 +17,33 @@ export default function NewTicketPage() {
     const [members, setMembers] = useState<OrgMember[]>([]);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [checking, setChecking] = useState(true);
 
     useEffect(() => {
+        // Check role before rendering the form
         fetch("/api/orgs/members")
             .then(r => r.json())
-            .then((data: OrgMember[]) => setMembers(data))
-            .catch(console.error);
-    }, []);
+            .then((data: OrgMember[] | { error: string }) => {
+                if ('error' in data) {
+                    router.replace("/tickets");
+                    return;
+                }
+                setMembers(data);
+                setChecking(false);
+            })
+            .catch(() => router.replace("/tickets"));
+
+        // Also verify user role
+        fetch("/api/auth/me")
+            .then(r => r.json())
+            .then((data: { role?: string }) => {
+                if (data.role === "viewer") {
+                    router.replace("/tickets");
+                }
+            })
+            .catch(() => {
+            });
+    }, [router]);
 
     function addTag() {
         const trimmed = tagInput.trim().toLowerCase();
@@ -76,6 +96,15 @@ export default function NewTicketPage() {
         }
     }
 
+    if (checking) {
+        return (
+            <div
+                className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-white to-slate-200">
+                <p className="text-gray-500">Checking permissions...</p>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200">
 
@@ -95,7 +124,6 @@ export default function NewTicketPage() {
                 </div>
             </header>
 
-            {/* FORM */}
             <main className="max-w-4xl mx-auto px-6 py-10">
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-gray-900">New Ticket</h1>
@@ -105,7 +133,6 @@ export default function NewTicketPage() {
                 <div className="rounded-2xl border border-white/30 bg-white/40 backdrop-blur-xl shadow-lg p-8">
                     <form onSubmit={handleSubmit} className="space-y-6">
 
-                        {/* Title */}
                         <div>
                             <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
                                 Title <span className="text-red-500">*</span>
@@ -122,7 +149,6 @@ export default function NewTicketPage() {
                             />
                         </div>
 
-                        {/* Description */}
                         <div>
                             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
                                 Description
@@ -138,7 +164,6 @@ export default function NewTicketPage() {
                             />
                         </div>
 
-                        {/* Severity */}
                         <div>
                             <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-1">
                                 Severity <span className="text-red-500">*</span>
@@ -158,7 +183,6 @@ export default function NewTicketPage() {
                             </select>
                         </div>
 
-                        {/* Assignee */}
                         <div>
                             <label htmlFor="assignee" className="block text-sm font-medium text-gray-700 mb-1">
                                 Assignee
@@ -179,26 +203,18 @@ export default function NewTicketPage() {
                             </select>
                         </div>
 
-                        {/* Tags */}
                         <div>
                             <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1">
                                 Tags
                             </label>
                             <div className="flex gap-2 mb-2 flex-wrap">
                                 {tags.map(tag => (
-                                    <span
-                                        key={tag}
-                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-black text-white rounded-full text-xs"
-                                    >
+                                    <span key={tag}
+                                          className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-black text-white rounded-full text-xs">
                                         {tag}
-                                        <button
-                                            type="button"
-                                            onClick={() => removeTag(tag)}
-                                            className="hover:text-gray-300 transition"
-                                            aria-label={`Remove tag ${tag}`}
-                                        >
-                                            ×
-                                        </button>
+                                        <button type="button" onClick={() => removeTag(tag)}
+                                                aria-label={`Remove tag ${tag}`}
+                                                className="hover:text-gray-300">×</button>
                                     </span>
                                 ))}
                             </div>
@@ -225,14 +241,10 @@ export default function NewTicketPage() {
                             <p className="text-xs text-gray-400 mt-1">Press Enter or comma to add a tag</p>
                         </div>
 
-                        {/* Error */}
                         {error && (
-                            <p role="alert" className="text-sm text-red-500 bg-red-50 px-4 py-2 rounded-lg">
-                                {error}
-                            </p>
+                            <p role="alert" className="text-sm text-red-500 bg-red-50 px-4 py-2 rounded-lg">{error}</p>
                         )}
 
-                        {/* Actions */}
                         <div className="flex items-center gap-3 pt-2">
                             <button
                                 type="submit"
@@ -241,10 +253,8 @@ export default function NewTicketPage() {
                             >
                                 {loading ? "Creating..." : "Create Ticket"}
                             </button>
-                            <Link
-                                href="/tickets"
-                                className="px-6 py-2.5 rounded-lg border border-gray-200 hover:bg-white transition font-medium text-sm text-gray-700"
-                            >
+                            <Link href="/tickets"
+                                  className="px-6 py-2.5 rounded-lg border border-gray-200 hover:bg-white transition font-medium text-sm text-gray-700">
                                 Cancel
                             </Link>
                         </div>

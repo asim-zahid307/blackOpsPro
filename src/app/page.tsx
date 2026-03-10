@@ -4,31 +4,31 @@ import LogoutButton from "@/lib/components/LogoutButton";
 import Link from "next/link";
 import EnterOrgButton from "@/lib/components/EnterOrgButton";
 
-interface OrgWithUsers {
+interface OrgWithStats {
     id: string;
     name: string;
     total_users: number;
+    total_tickets: number;
 }
 
-async function getAllOrgsWithUserCount(): Promise<OrgWithUsers[]> {
+async function getAllOrgsWithStats(): Promise<OrgWithStats[]> {
     const result = await query(`
-        SELECT o.id, o.name, COUNT(uo.user_id) AS total_users
+        SELECT o.id,
+               o.name,
+               COUNT(DISTINCT uo.user_id)::int AS total_users, COUNT(DISTINCT t.id) ::int       AS total_tickets
         FROM organizations o
                  LEFT JOIN user_organizations uo ON o.id = uo.org_id
+                 LEFT JOIN tickets t ON o.id = t.org_id
         GROUP BY o.id
         ORDER BY o.name
     `);
 
-    return result.rows.map((row) => ({
-        id: row.id as string,
-        name: row.name as string,
-        total_users: parseInt(row.total_users as string, 10),
-    }));
+    return result.rows as OrgWithStats[];
 }
 
 export default async function DashboardPage() {
     const user = await requireAuth();
-    const orgs = await getAllOrgsWithUserCount();
+    const orgs = await getAllOrgsWithStats();
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200">
@@ -62,7 +62,7 @@ export default async function DashboardPage() {
                 </div>
             </header>
 
-            {/* MAIN CONTENT */}
+            {/* MAIN */}
             <main className="max-w-7xl mx-auto px-6 py-12">
                 <div className="mb-10">
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">Organizations Overview</h1>
@@ -83,10 +83,25 @@ export default async function DashboardPage() {
                                         className="h-12 w-12 rounded-xl bg-black text-white flex items-center justify-center font-semibold mb-4 mx-auto">
                                         ORG
                                     </div>
-                                    <h2 className="text-lg font-semibold text-gray-900 mb-1">{org.name}</h2>
-                                    <p className="text-sm text-gray-600 mb-4">
-                                        {org.total_users} member{org.total_users !== 1 ? 's' : ''}
-                                    </p>
+                                    <h2 className="text-lg font-semibold text-gray-900 mb-3">{org.name}</h2>
+
+                                    {/* Stats row */}
+                                    <div className="flex justify-center gap-6 mb-5">
+                                        <div className="text-center">
+                                            <p className="text-2xl font-bold text-gray-900">{org.total_users}</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                {org.total_users === 1 ? 'Member' : 'Members'}
+                                            </p>
+                                        </div>
+                                        <div className="w-px bg-gray-200"/>
+                                        <div className="text-center">
+                                            <p className="text-2xl font-bold text-blue-600">{org.total_tickets}</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                {org.total_tickets === 1 ? 'Ticket' : 'Tickets'}
+                                            </p>
+                                        </div>
+                                    </div>
+
                                     <EnterOrgButton orgId={org.id} orgName={org.name}/>
                                 </div>
                             </div>
@@ -99,7 +114,6 @@ export default async function DashboardPage() {
                 </div>
             </main>
 
-            {/* FOOTER */}
             <footer className="text-center text-sm text-gray-500 pb-8">
                 BlackOps Pro • Dashboard
             </footer>
