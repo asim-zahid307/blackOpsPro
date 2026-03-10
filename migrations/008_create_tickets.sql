@@ -1,4 +1,4 @@
--- Create ticket status enum
+-- Safe one-time creation of tickets schema
 DO
 $$
 BEGIN
@@ -8,7 +8,6 @@ CREATE TYPE ticket_status AS ENUM ('open', 'investigating', 'mitigated', 'resolv
 END IF;
 END $$;
 
--- Create tickets table
 CREATE TABLE IF NOT EXISTS tickets
 (
     id
@@ -28,7 +27,7 @@ CREATE TABLE IF NOT EXISTS tickets
     500
 ) NOT NULL,
     description TEXT,
-    severity SMALLINT NOT NULL CHECK
+    severity SMALLINT NOT NULL DEFAULT 3 CHECK
 (
     severity
     BETWEEN
@@ -54,10 +53,63 @@ CREATE TABLE IF NOT EXISTS tickets
 )
     );
 
--- Indexes for common query patterns
+CREATE TABLE IF NOT EXISTS tags
+(
+    id
+    UUID
+    PRIMARY
+    KEY
+    DEFAULT
+    gen_random_uuid
+(
+),
+    org_id UUID NOT NULL REFERENCES organizations
+(
+    id
+) ON DELETE CASCADE,
+    name VARCHAR
+(
+    100
+) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW
+(
+),
+    UNIQUE
+(
+    org_id,
+    name
+)
+    );
+
+CREATE TABLE IF NOT EXISTS ticket_tags
+(
+    ticket_id
+    UUID
+    NOT
+    NULL
+    REFERENCES
+    tickets
+(
+    id
+) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES tags
+(
+    id
+)
+  ON DELETE CASCADE,
+    PRIMARY KEY
+(
+    ticket_id,
+    tag_id
+)
+    );
+
 CREATE INDEX IF NOT EXISTS idx_tickets_org_id ON tickets(org_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(org_id, status);
 CREATE INDEX IF NOT EXISTS idx_tickets_severity ON tickets(org_id, severity);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee ON tickets(assignee_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_updated_at ON tickets(updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_by ON tickets(created_by);
+CREATE INDEX IF NOT EXISTS idx_ticket_tags_ticket ON ticket_tags(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_tags_tag ON ticket_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_tags_org ON tags(org_id);
