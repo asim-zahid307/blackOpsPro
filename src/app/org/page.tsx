@@ -3,6 +3,7 @@ import {queryOne, query} from "@/lib/db";
 import {requireAuth} from "@/lib/auth";
 import LogoutButton from "@/lib/components/LogoutButton";
 import MemberRoleManager from "@/lib/components/MemberRoleManager";
+import InviteManager from "@/lib/components/InviteManager";
 import Link from "next/link";
 import {OrgMember} from "@/types/ticket";
 
@@ -191,6 +192,11 @@ export default async function OrgPage() {
                                 currentUserId={user.userId}
                                 currentUserRole={role}
                             />
+                        )}
+
+                        {/* Invite manager — only visible to admin/owner */}
+                        {canManage && (
+                            <InviteManager currentUserRole={role}/>
                         )}
                     </>
                 ) : (
