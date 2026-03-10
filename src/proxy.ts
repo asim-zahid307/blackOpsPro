@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
     '/api/signup',
     '/api/orgs',
     '/api/invites/info',
+    '/api/health',
     '/invite/',
     '/_next',
     '/favicon',
