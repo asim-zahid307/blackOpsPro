@@ -1,11 +1,24 @@
-import { NextResponse } from 'next/server';
-import { logoutUser } from '@/lib/auth';
+import {NextResponse} from 'next/server';
 
 export async function POST() {
-    try {
-        await logoutUser();
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        return NextResponse.json({ error: (error as Error).message }, { status: 400 });
-    }
+    const response = NextResponse.json({message: 'Logged out successfully'});
+
+    // Clear auth token
+    response.cookies.set('auth-token', '', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 0,
+        path: '/',
+    });
+
+    // Clear org context
+    response.cookies.set('current_org_id', '', {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 0,
+        path: '/',
+    });
+
+    return response;
 }
